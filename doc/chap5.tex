@@ -20,14 +20,14 @@ UNIXの\|fork-exec|方式とは異なります．
 
 \|path|でプログラムファイルを指定し，
 新しいプロセスで新しいプログラムの実行を開始します．
-\|argv|は，開始するプログラムの\|main|関数の
-第２引数（\|char[][]argv|）に渡される文字列配列です．
+\|argv|と\|envp|は，それぞれ開始するプログラムの\|main|関数の
+第２引数（\|char[][]argv|）と第３引数（\|char[][]envp|）に渡される文字列配列です．
 \|exec|は正常なら\|0|，エラー発生なら負のエラー番号を返します．
 
 \begin{quote}
 \begin{verbatim}
 #include <syslib.hmm>
-public int exec(char[] path, void[] argv);
+public int exec(char[] path, void[] argv, void[] envp);
 \end{verbatim}
 \end{quote}
 

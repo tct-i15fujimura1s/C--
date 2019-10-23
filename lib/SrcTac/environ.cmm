@@ -1,0 +1,126 @@
+/*
+ * Programingxx Language C-- "Compiler"
+ *    Tokuyama kousen Advanced educational Computer.
+ *
+ * Copyright (C) 2019 by
+ *                      Dept. of Computer Science and Electronic Engineering,
+ *                      Tokuyama College of Technology, JAPAN
+ *
+ *   上記著作権者は，Free Software Foundation によって公開されている GNU 一般公
+ * 衆利用許諾契約書バージョン２に記述されている条件を満たす場合に限り，本ソース
+ * コード(本ソースコードを改変したものを含む．以下同様)を使用・複製・改変・再配
+ * 布することを無償で許諾する．
+ *
+ *   本ソースコードは＊全くの無保証＊で提供されるものである。上記著作権者および
+ * 関連機関・個人は本ソースコードに関して，その適用可能性も含めて，いかなる保証
+ * も行わない．また，本ソースコードの利用により直接的または間接的に生じたいかな
+ * る損害に関しても，その責任を負わない．
+ *
+ *
+ */
+
+/*
+ * lib/environ.cmm : 環境変数へのアクセス
+ *
+ * 2019.10.21 : 新規作成
+ *
+ * $Id$
+ */
+
+#include <environ.hmm>
+#include <crt0.hmm>
+#include <stdlib.hmm>
+#include <string.hmm>
+#include <syslib.hmm>
+#include <errno.hmm>
+
+public char[][] environ;                        // 初期化ルーチン crt0.s の中で格納される
+
+public void _environInit(char[][] envp) {
+  int strSize = 0;
+  int envs = 0;
+  while (envp[envs]!=null) envs = envs+1;       // 環境変数の個数を数える
+  environ = malloc(2*envs+1);
+  for (int i=0; i<envs; i=i+1) {
+    environ[i] = malloc(strLen(envp[i]) + 1);
+    strCpy(environ[i], envp[i]);
+  }
+  environ[envs] = null;
+}
+
+// 有効な環境変数名かチェックする
+void validateEnvName(char[] name) {
+  if (name==null ||                             // null だったり
+    name[0]=='\0' ||                            //   長さが 0 だったり
+    strChr(name, '=')!=-1)                      //   '=' が含まれていたら
+    _exit(EINVAL);                              //   無効な名前
+}
+
+// 環境変数を探し、見つけたら environ のインデックスで返す (見つからなければ null のインデックス)
+int findEnv(char[] name) {
+  int i;
+  for (i=0; environ[i]!=null; i=i+1) {          // すべての環境変数について
+    int nameLen = strChr(environ[i], '=');      //   名前の長さを調べる
+    if (nameLen<0) continue;                    //   区切り文字が存在しないものは無視
+    if (strCmp(environ[i], name)==0) return i;  //   名前が合っていればインデックスを返す
+  }
+  return i;
+}
+
+// 環境変数の値を取得する (存在しない場合、 null を返す)
+public char[] getEnv(char[] name) {
+  validateEnvName(name);                        // 名前チェック
+  int i = findEnv(name);                        // 環境変数を探す
+  if (environ[i]==null) return null;            // 存在しなければ null を返す
+  return _addrAdd(environ[i], strLen(name) + 1);// 値の部分を返す
+}
+
+// 環境変数の値を変更する
+public int setEnv(char[] name, char[] value, boolean overwrite) {
+  validateEnvName(name);                        // 名前チェック
+  int nameLen = strLen(name);
+  int len = nameLen + 1 + strLen(value);
+  int i = findEnv(name);                        // 環境変数を探す
+  if (environ[i]!=null) {                       // 存在する
+    if (!overwrite) return 0;                   //   overwrite が false
+    if (strLen(environ[i])<len) {               //   領域サイズが足りない
+      free(environ[i]);                         //     解放
+      environ[i] = malloc(len+1);               //     割り付け
+      strCpy(environ[i], name);                 //     名前をコピー
+      environ[i][nameLen] = '=';
+    }
+    strCpy(_addrAdd(environ[i], nameLen+1), value);//   値をコピー
+    return 0;
+  }
+  // 存在しない
+  char[][] newEnv = malloc(i+4);                // 新しく領域を割り付け
+  for (int j=0; environ[j]!=null; j=j+1)        // 環境変数を
+    newEnv[j] = environ[j];                     //   コピー
+  newEnv[i] = malloc(len+1);                    // 領域を割り付け
+  strCpy(newEnv[i], name);                      // 名前をコピー
+  newEnv[i][nameLen] = '=';
+  strCpy(_addrAdd(newEnv[i], nameLen+1), value);// 値をコピー
+  return 0;
+}
+
+// name=value の形式で格納する
+public int putEnv(char[] string) {
+  int nameLen = strChr(string, '=');
+  string[nameLen] = '\0';
+  char[] value = _addrAdd(string, nameLen+1);
+  int r = setEnv(string, value, true);
+  string[nameLen] = '=';
+  return r;
+}
+
+// 環境変数を削除する
+public int unsetEnv(char[] name) {
+  int i = findEnv(name);
+  if (environ[i]==null) return 0;               // 存在しない場合
+  free(environ[i]);                             // 領域を解放
+  int envs = i;
+  while (environ[envs]!=null) envs = envs+1;    // 環境変数の個数を取得
+  environ[i] = environ[envs-1];                 // 空いた場所を最後尾で埋める
+  environ[envs-1] = null;                       // 最後尾のあった場所を null で埋める
+  return 0;
+}
