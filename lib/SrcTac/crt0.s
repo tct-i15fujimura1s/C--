@@ -46,6 +46,8 @@
 .start
     call    __stdlibInit        ; stdlibの初期化ルーチンを呼ぶ
     call    __stdioInit         ; stdio の初期化ルーチンを呼ぶ
+    ld      g0,4,sp             ; 環境変数を
+    st      g0,_environ         ;   _environ 変数に入れる
     call    _main               ; ユーザプログラムのメインに飛ぶ
     push    g0                  ; メインの戻り値をスタックに積む
     call    _exit               ; プログラムの最後まで到達した場合は終了する
@@ -56,7 +58,7 @@
 ;; アドレスから整数へ変換
 __aToI                          ; int _aToI(void[] a);
 ;; 整数からアドレスへ変換
-__iToA                          ; void[] _iToA(int a);         
+__iToA                          ; void[] _iToA(int a);
 ;; アドレスからアドレスへ変換
 __aToA                          ; void[] _aToA(void[] a);
         ld      g0,2,sp
@@ -171,14 +173,14 @@ __out                           ; void out(int p,int v);
         out     g1,g0	        ; I/O ポートへ出力する
         ret
 
-;; ヒープとスタックの間に 10Byte 以上の余裕があるかチェックする 
+;; ヒープとスタックの間に 10Byte 以上の余裕があるかチェックする
 __stkChk
         ld      g0,__alcAddr    ; G0 にヒープ領域の最後をロード
         add     g0,#10          ; 10Byte 分の余裕を持たせる
         cmp     g0,sp           ; G0 と G1 を比較 [ヒープの最後+10Byte] - [SP]
         jnc     .stkOverFlow    ; ユーザスタックがオーバーフローしている
         ret
-        
+
 ; スタックがオーバーフローした場合、 _exit(EUSTK) を実行
 .stkOverFlow
         ld      g0,#-25         ; パラメータ(EUSTK)
