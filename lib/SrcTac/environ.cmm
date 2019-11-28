@@ -131,22 +131,95 @@ public boolean putEnv(char[] string) {
 // 環境変数を２つの文字列 "名前" ， "値" を用いて設定
 // （overwrite が false で既に同名の環境変数が存在するなら何もしない）
 public boolean setEnv(char[] name, char[] value, boolean overwrite) {
-  if (strChr(name, '=') >= 0) {                             // nameが'='を含む
-    errno = EINVAL;                                         //  errnoを変更して
-    return true;                                            //   エラー終了
+  int nameLen = strLen(name);
+  if (nameLen == 0 || strChr(name, '=') >= 0) return EINVAL;// name の長さが 0 もしくは '=' を含む場合はエラー
+  int valueLen = strLen(value);
+  int index = envIndex(name);                               // 環境変数の位置を調べる
+  if (environ[index] == null) {                             // 環境変数が存在しない
+    int envs = index + 1;                                   //    environ[index]==null のとき、 index=envs
+    if (envs > capacity) {                                  //    environ の容量が足りない場合
+      char[][] newEnv = malloc(sizeof(char[]) * (envs + 1));//    新しい環境変数の領域を確保する
+      for (int i = 0; i < envs; i = i + 1)                  //   すべての環境変数を
+        newEnv[i] = environ[i];                             //     newEnv にコピーする
+      newEnv[envs] = null;                                  //   null 終端
+      free(environ);                                        //   古い環境変数の領域を解放
+      environ = newEnv;                                     //   新しい環境変数の領域で置換え
+      capacity = envs;                                      //   容量を更新
+    }
+    environ[index] = malloc(nameLen + 1 + valueLen + 1);    //   メモリ確保
+    strCpy(environ[index], name);                           //   名前を格納
+    environ[index][nameLen] = '=';                          //   '=' を格納
+  } else {                                                  // 環境変数が存在する
+    if (!overwrite) return false;                           //   overwrite が false なら終了
+    if (valueLen > strLen(environ[index]) - nameLen - 1) {  //   新しい値が現在の値より長い場合
+      free(environ[index]);                                 //     メモリ解放
+      environ[index] = malloc(nameLen + 1 + valueLen + 1);  //     メモリ確保
+      strCpy(environ[index], name);                         //     名前を格納
+      environ[index][nameLen] = '=';                        //     '=' を格納
+    }
   }
-  return setNEnv(name, strLen(name), value, overwrite);     // 追加・上書きする
+  strCpy(_addrAdd(environ[index], nameLen + 1), value);     // 値を格納
+  return false;
 }
 
-// 環境変数を削除（存在しなければ何もしない）
-public boolean unsetEnv(char[] name) {
-  int index = envIndex(name, strLen(name));                 // 環境変数を探索
-  if (environ[index] == null) {                             // 存在しないなら
-    return false;                                           //  正常終了
-  }
-  free(environ[index]);                                     // メモリを解放する
-  for (int i=index; environ[i]!=null; i=i+1) {              // より後ろの要素は
-    environ[i] = environ[i+1];                            //    前につめる
-  }
+// 環境変数を削除する。存在しなければ何もしない。
+public int unsetEnv(char[] name) {
+  int index = envIndex(name);
+  if (environ[index] == null) return true;                  // 環境変数が存在しなければ何もしない
+  free(environ[index]);                                     // メモリ解放
+  for (int i = index; environ[i] != null; i = i + 1)        // 後ろの環境変数 (null 終端も含む) を
+    environ[i] = environ[i + 1];                            //   前につめる
   return false;
+}
+
+// 2つのパスを連結する。dst<-dst/src。返り値はパスの長さ。
+int joinPath(char[] dst, int dstSiz, char[] src, int srcLen) {
+  int dstLen = strLen(dst);
+  if (dst[dstLen-1] != '/') {                               // dst 末尾が '/' でない
+    strNcat(dst, "/", dstSiz - dstLen - 1);                 //  '/' をつける
+    dstLen = dstLen + 1;
+  }
+  int len = dstSiz - dstLen;
+  if (len > srcLen) len = srcLen;
+  strNcat(dst, src, len);
+  return dstLen + len;
+}
+
+// 絶対パスを取得する。
+public int absPath(char[] path, char[] buf, int bufSiz) {
+  if (path == null || buf == null) return EINVAL;           // path か len が null
+  int pathLen = strLen(path);
+  if (pathLen <= 0 || bufSiz <= 0) return EINVAL;           // path か len の長さが 0 以下
+  // 探索開始位置を決める
+  if (path[0] == '/') {                                     // 1文字目が '/'
+    strCpy(buf, "/");
+  } else {                                                  // それ以外
+    char[] pwd = getEnv("PWD");                             //   PWD を取得
+    if (pwd == null) pwd = "/";                             //   なければ / で代用
+    if (pwd[0] != '/') return EPATH;                        //   PWD が絶対パスでない
+    int pwdLen = strLen(pwd);
+    if (pwdLen > bufSiz) return pwdLen;                     //   buf が足りないので終了
+    strCpy(buf, pwd);
+  }
+  // パスを辿る
+  Stat sta;
+  int resLen = 0;
+  for (int p=0; ;) {                                        //
+    while (p<pathLen && path[p]=='/') p = p + 1;            //   余計な '/' を読み飛ばす
+    if (p>=pathLen) break;                                  //   パス解析完了
+
+    char[] name = _addrAdd(path, p);                        //   ファイル名の文字列
+    int nameLen = strChr(name, '/');                        //   ファイル名の長さ
+    if (nameLen < 0) nameLen = strLen(name);
+    if (strNcmp(name, ".", nameLen) == 0) {}                //   同一ディレクトリ
+    else if (strNcmp(name, "..", nameLen) == 0) {           //   親ディレクトリ
+      int lastSl = strRchr(buf, '/');                       //     最後の '/'
+      if (lastSl == 0) buf[1] = '\0';
+      else buf[lastSl] = '\0';                              //       以降を削除
+    } else {                                                //   それ以外
+      resLen = joinPath(buf, bufSiz, name, nameLen);        //     buf に結合する
+    }
+    p = p + nameLen + 1;
+  }
+  return resLen;
 }
