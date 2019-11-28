@@ -123,16 +123,19 @@ boolean setNEnv(char[] name, int nameLen, char[] value, boolean overwrite) {
 
 // 環境変数を "名前=値" 形式の文字列を用いて設定
 public boolean putEnv(char[] string) {
-  int nameLen = strChr(string, '=');                        // '=' を探索する
-  char[] value = _addrAdd(string, nameLen+1);               // 値のアドレス計算
-  return setNEnv(string, nameLen, value, true);             // setNEnv で処理
+  int nameLen = strChr(string, '=');                        // '=' の位置 == 名前の長さ
+  if (nameLen <= 0) return true;                            // 値がないか、名前の長さが 0 ならエラー
+  string[nameLen] = '\0';                                   // string を name と value に分割する
+  setEnv(string, _addrAdd(string, nameLen + 1), true);      // setEnv に渡す
+  string[nameLen] = '=';                                    // string を元に戻す
+  return false;
 }
 
 // 環境変数を２つの文字列 "名前" ， "値" を用いて設定
 // （overwrite が false で既に同名の環境変数が存在するなら何もしない）
 public boolean setEnv(char[] name, char[] value, boolean overwrite) {
   int nameLen = strLen(name);
-  if (nameLen == 0 || strChr(name, '=') >= 0) return EINVAL;// name の長さが 0 もしくは '=' を含む場合はエラー
+  if (nameLen == 0 || strChr(name, '=') >= 0) return false; // name の長さが 0 もしくは '=' を含む場合はエラー
   int valueLen = strLen(value);
   int index = envIndex(name);                               // 環境変数の位置を調べる
   if (environ[index] == null) {                             // 環境変数が存在しない
@@ -163,7 +166,7 @@ public boolean setEnv(char[] name, char[] value, boolean overwrite) {
 }
 
 // 環境変数を削除する。存在しなければ何もしない。
-public int unsetEnv(char[] name) {
+public boolean unsetEnv(char[] name) {
   int index = envIndex(name);
   if (environ[index] == null) return true;                  // 環境変数が存在しなければ何もしない
   free(environ[index]);                                     // メモリ解放
