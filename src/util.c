@@ -42,6 +42,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <strings.h>
+#include <unistd.h>
 
 #include "lexer.h"
 #include "util.h"
@@ -63,14 +64,20 @@ void errmsg() {
 }
 
 void error(char s[]) {
+  int is_tty = isatty(fileno(stderr));
+  if (is_tty) fprintf(stderr, "\x1b[31m");
   errmsg();
   fprintf(stderr,"%s\n", s);
+  if (is_tty) fprintf(stderr, "\x1b[0m");
   exit(1);
 }
 
 void error2(char s1[], char s2[]) {
+  int is_tty = isatty(fileno(stderr));
+  if (is_tty) fprintf(stderr, "\x1b[31m");
   errmsg();
   fprintf(stderr,"%s : %s\n", s2, s1);
+  if (is_tty) fprintf(stderr, "\x1b[0m");
   exit(1);
 }
 
