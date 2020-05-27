@@ -146,7 +146,7 @@ static void getTok() {                       // 次のトークンを入力す�
 #define tok _getTok()                        // tok 使用は、_getTok() に置換え
 static int _getTok() {                       // tok 使用時に
   while (_tok==LxFILE) {                     //   ディレクティブを読み飛ばす
-    _tok = lxGetTok();                       //     次もディレクティブなら     
+    _tok = lxGetTok();                       //     次もディレクティブなら
     if (_tok==LxFILE) setFname(lxGetStr());  //       ファイル名記憶記憶して
   }                                          //         やり直す
   return _tok;
@@ -214,9 +214,11 @@ static void getName(boolean pub) {
 static void getFieldLine(void) {
   getType();                                    // 型を読み込む
   getName(false);                               // 名前を読み込んで表に登録
+  //TODO: '=' defaultValue
   curCnt = curCnt + 1;                          // フィールドの番号
   while (isTok(',')) {                          // ','が続く間
     getName(false);                             //    名前を読み込んで表に登録
+    //TODO: '=' defaultValue
     curCnt = curCnt + 1;                        // フィールドの番号
   }
   chkTok(';', "構造体フィールドの宣言が ';' で終わっていない");
@@ -1071,6 +1073,7 @@ static int getStructInit0() {
   int node = SyNULL;
   int i=-curType+1;                          // i が構造体フィールドを指す
   do {
+    if (tok=='}') break;                     // フィールドの終わり
     if (i>=ntGetSize()||ntGetScope(i)!=ScVOID)
       error("構造体初期化がフィールドより多い");
     int n = 0;
@@ -1096,8 +1099,22 @@ static int getStructInit0() {
     node = syCatNode(node, n);
     i=i+1;                                   // i を進める
   } while (isTok(','));                      // ',' が続く間繰り返す
-  if (i<ntGetSize() && ntGetScope(i)==ScVOID)
-    error("構造体の初期化がフィールドより少ない");
+
+  // 初期化がフィールドより少ない場合、残ったフィールドをデフォルト値で初期化
+  while (i < ntGetSize() && ntGetScope(i) == ScVOID) {
+    int n = 0;
+    if (ntGetType(i)<=0 || ntGetDim(i)>0) {  // 構造体か配列
+      n = syNewNode(SyCNST, 0, TyREF);       //   null
+    } else if (ntGetType(i)==TyINT) {        // 整数型
+      n = syNewNode(SyCNST, 0, TyINT);       //   0
+    } else if (ntGetType(i)==TyBOOL) {       // 論理型
+      n = syNewNode(SyCNST, 0, TyBOOL);      //   false
+    } else if (ntGetType(i)==TyCHAR) {       // 文字型
+      n = syNewNode(SyCNST, 0, TyCHAR);      //   '\0'
+    } else error("バグ...getStructInit0");
+    node = syCatNode(node, n);
+    i=i+1;
+  }
   return node;
 }
 

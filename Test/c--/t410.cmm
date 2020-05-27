@@ -1,0 +1,13 @@
+/*
+ * t410.cmm : 構造体の初期化（フィールドの省略）
+ */
+
+struct Complex {
+  int real, imag;
+};
+
+Complex z = {};
+
+public int main() {
+  return z.real + z.imag;
+}
