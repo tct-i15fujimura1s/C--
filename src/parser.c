@@ -721,6 +721,15 @@ static int getLVar(void) {
 }
 */
 
+static int getInit(int typ, int dim) {
+  struct watch *w = newWatch();
+  getAsExpr(w);                              // 初期化式にはカンマ式不可
+  chkCmpat(w, typ, dim);                     // 初期化(代入)できるかチェック
+  int tree = w->tree;                        // 定数式の木を取り出す
+  freeWatch(w);                              // 式(w)は役目を終えた
+  return tree;
+}
+
 static int getLVar(void) {
   curCnt = curCnt + 1;                         // ローカル変数の番号
   getName(false);                              // 変数名を読み込み表に登録
@@ -728,11 +737,8 @@ static int getLVar(void) {
   dec = syNewNode(SyVAR, curCnt, dec);         // 変数宣言
   if (isTok('=')) {                            // '='があれば、初期化がある
     int sta = syNewNode(SyLOC,curCnt,SyNULL);  // 初期化の左辺を作る
-    struct watch *w = newWatch();
-    getAsExpr(w);                              // 初期化式にはカンマ式不可
-    chkCmpat(w, curType, curDim);              // 初期化(代入)できるかチェック
-    sta = syNewNode(SyASS, sta, w->tree);      // 左辺と右辺を接続
-    freeWatch(w);                              // 式(w)は役目を終えた
+    int tree = getInit(curType, curDim);       // 木を取り出す
+    sta = syNewNode(SyASS, sta, tree);         // 左辺と右辺を接続
     dec = syCatNode(dec, sta);                 // 宣言と初期化を接続
   }
   return dec;
@@ -1033,11 +1039,7 @@ static int getGArrayInit(int dim);           // 再帰呼出があるので宣�
 
 // 初期化に使用される定数式を読み込む
 static int getCnst(int typ) {
-  struct watch *w = newWatch();
-  getAsExpr(w);                              // 初期化式にはカンマ式不可
-  chkCmpat(w, typ, 0);                       // 初期化(代入)できるかチェック
-  int tree = w->tree;                        // 定数式の木を取り出す
-  freeWatch(w);                              // 式(w)は役目を終えた
+  int tree = getInit(typ, 0);
   optTree(tree);                             // 定数式を計算する
   int ty = syGetType(tree);
   if (ty!=SyCNST && ty!=SyADDR && ty!=SySTR && ty!=SySIZE)
